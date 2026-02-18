@@ -1,0 +1,11 @@
+# PyInstaller
+dist/
+build/
+*.spec
+
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ 'Edit' if main_data else 'Create' }} {{ (doc_type | default('')).replace('_',' ').title() }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.5;
+        }
+        h1, h3 {
+            margin-top: 20px;
+        }
+        input, select, button {
+            margin: 4px 0;
+            padding: 4px;
+        }
+        .entry-row {
+            margin: 10px 0;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .entry-row button {
+            margin-left: 8px;
+        }
+        iframe#pdf-preview {
+            width: 100%;
+            height: 800px;
+            border: 1px solid #ccc;
+            margin-top: 10px;
+        }
+        form label {
+            display: inline-block;
+            width: 150px;
+        }
+        form button {
+            padding: 6px 12px;
+        }
+    </style>
+</head>
+
+<head>
+    <title>{{ 'Edit' if main_data else 'Create' }} {{ (doc_type | default('')).replace('_',' ').title() }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.5; }
+        h1, h3 { margin-top: 20px; }
+        input, select, button { margin: 4px 0; padding: 4px; }
+        .entry-row { margin: 10px 0; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .entry-row button { margin-left: 8px; }
+        iframe#pdf-preview { width: 100%; height: 800px; border: 1px solid #ccc; margin-top: 10px; }
+        form label { display: inline-block; width: 150px; }
+        form button { padding: 6px 12px; }
+    </style>
+</head>
+<body>
+
+<h1>{{ 'Edit' if main_data else 'Create' }} {{ (doc_type | default('')).replace('_',' ').title() }}</h1>
+
+<form method="post" enctype="multipart/form-data">
+
+    {% if doc_type == 'debit_note' %}
+        <label>Issue date:</label> <input type="date" name="issue_date" value="{{ main_data.issue_date | default('') }}"><br>
+        <label>Insured/Agent:</label> <input type="text" name="insured_or_agent" value="{{ main_data.insured_or_agent | default('') }}"><br>
+        <label>Insurance class:</label> <input type="text" name="insurance_class" value="{{ main_data.insurance_class | default('') }}"><br>
+        <label>Policy number:</label> <input type="text" name="policy_number" value="{{ main_data.policy_number | default('') }}"><br>
+        <label>Endorsement number:</label> <input type="text" name="endorsement_number" value="{{ main_data.endorsement_number | default('') }}"><br>
+        <label>Account number:</label> <input type="text" name="account_number" value="{{ main_data.account_number | default('') }}"><br>
+
+        <h3>Financial Entries</h3>
+        <div id="financial-container">
+            {% for f in main_data.financials | default([])%}
+            <div class="entry-row">
+                Category: <input type="text" name="category[]" value="{{ f.category | default('') }}">
+                Gross: <input type="number" step="any" name="gross_premium[]" value="{{ f.gross_premium | default('') }}">
+                Commission: <input type="number" step="any" name="commission[]" value="{{ f.commission | default('') }}">
+                Overriding Insurer: <input type="number" step="any" name="overriding_insurer[]" value="{{ f.overriding_insurer | default('') }}">
+                Cost: <input type="number" step="any" name="cost[]" value="{{ f.cost | default('') }}">
+                Profit: <input type="number" step="any" name="profit[]" value="{{ f.profit | default('') }}">
+                <button type="button" onclick="this.parentElement.remove()">X</button>
+            </div>
+            {% endfor %}
+        </div>
+        <button type="button" onclick="addFinancialRow()">Add Financial Entry</button>
+        <br><br>
+    {% endif %}
+
+    {% if doc_type == 'account_statement' %}
+        <label>Issue date:</label> <input type="date" name="issue_date" value="{{ main_data.issue_date | default('') }}"><br>
+        <label>Address:</label> <input type="text" name="address" value="{{ main_data.address | default('') }}"><br>
+        <label>Account number:</label> <input type="text" name="account_number" value="{{ main_data.account_number | default('') }}"><br>
+        <label>Total premium due:</label> <input type="number" name="total_premium_due" step="0.01" value="{{ main_data.total_premium_due | default('') }}"><br>
+        <label>Premium due date:</label> <input type="date" name="premium_due_date" value="{{ main_data.premium_due_date | default('') }}"><br>
+
+        <h3>Statement Entries</h3>
+        <div id="entry-container">
+            {% for e in main_data.entries | default([]) %}
+            <div class="entry-row">
+                Effective date: <input type="date" name="effective_date[]" value="{{ e.effective_date | default('') }}">
+                Debit note: <input type="text" name="debit_note[]" value="{{ e.debit_note | default('') }}">
+                Policy number: <input type="text" name="policy_number[]" value="{{ e.policy_number | default('') }}">
+                Premium: <input type="number" step="0.01" name="premium[]" value="{{ e.premium | default('') }}" oninput="updateTotalPremiumDue()">
+                <button type="button" onclick="this.parentElement.remove(); updateTotalPremiumDue();">X</button>
+            </div>
+            {% endfor %}
+        </div>
+        <button type="button" onclick="addStatementEntry()">Add Entry</button>
+        <br><br>
+    {% endif %}
+
+    {% if doc_type == 'renewal_notice' %}
+        <label>Issue Date:</label> <input type="date" name="issue_date" value="{{ main_data.issue_date | default('') }}"><br>
+        <label>Insured:</label> <input type="text" name="insured" value="{{ main_data.insured | default('') }}"><br>
+        <label>Insurance class:</label> <input type="text" name="insurance_class" value="{{ main_data.insurance_class | default('') }}"><br>
+        <label>Policy number:</label> <input type="text" name="policy_number" value="{{ main_data.policy_number | default('') }}"><br>
+        <label>Expiry date:</label> <input type="date" name="expiry_date" value="{{ main_data.expiry_date | default('') }}"><br>
+        <label>AC Code:</label> <input type="text" name="ac_code" value="{{ main_data.ac_code | default('') }}"><br>
+
+        <h3>Renewal Breakdown</h3>
+        <div id="renewal-entry-container">
+            {% for r in main_data.entries | default([])%}
+            <div class="entry-row">
+                Label: <input type="text" name="label[]" value="{{ r.label | default('') }}">
+                Amount: <input type="number" step="0.01" name="amount[]" value="{{ r.amount | default('') }}" oninput="updateTotalEarning()">
+                <button type="button" onclick="this.parentElement.remove(); updateTotalEarning();">X</button>
+            </div>
+            {% endfor %}
+        </div>
+        <button type="button" onclick="addRenewalEntry()">Add Subtotal Entry</button>
+        <br><br>
+
+        <label>Total Earning:</label> <input type="number" step="0.01" name="total_earning" value="{{ main_data.total_earning | default('') }}"><br>
+        <label>Renewal Premium:</label> <input type="number" step="0.01" name="renewal_premium" value="{{ main_data.renewal_premium | default('') }}"><br>
+    {% endif %}
+
+    <label>Uploaded by:</label> <input type="text" name="uploaded_by" value="{{ main_data.uploaded_by | default('') }}"><br><br>
+    <label>Document File:</label> <input type="file" name="document_file" accept=".pdf,.docx,.xlsx,.txt" onchange="previewLocalPDF(this)"><br><br>
+
+    <iframe id="pdf-preview" style="display:none;"></iframe>
+
+    {% if main_data and main_data.file_name %}
+        Current file: 
+        <a href="{{ url_for('download_file', doc_type=doc_type, doc_id=main_data.id) }}" target="_blank">{{ main_data.file_name }}</a> |
+        <button type="button" onclick="window.open('{{ url_for('preview_pdf', doc_type=doc_type, doc_id=main_data.id) }}', '_blank')">Preview PDF</button><br>
+    {% endif %}
+
+    <button type="button" onclick="scanPDF()">Scan PDF & Fill</button>
+    <input type="hidden" name="doc_type" value="{{ doc_type | default('') }}">
+    <input type="submit" value="{{ 'Update' if main_data else 'Submit' }}">
+</form>
+
+<br>
+<a href="{{ url_for('index') }}">Back to list</a>
+
+<script>
+    window.addEventListener('DOMContentLoaded', () => {
+    const iframe = document.getElementById("pdf-preview");
+    {% if main_data and main_data.get('id') %}
+        iframe.src = "{{ url_for('preview_pdf', doc_type=doc_type, doc_id=main_data['id']) }}";
+        iframe.style.display = "block";
+    {% endif %}
+});
+function updateTotalPremiumDue() {
+    let total = 0;
+    document.querySelectorAll('input[name="premium[]"]').forEach(p => {
+        const val = parseFloat(p.value); if(!isNaN(val)) total += val;
+    });
+    const input = document.querySelector('input[name="total_premium_due"]');
+    if(input) input.value = total.toFixed(2);
+}
+
+function updateTotalEarning() {
+    let total = 0;
+    document.querySelectorAll('input[name="amount[]"]').forEach(a => {
+        const val = parseFloat(a.value); if(!isNaN(val)) total += val;
+    });
+    const input = document.querySelector('input[name="total_earning"]');
+    if(input) input.value = total.toFixed(2);
+}
+
+function previewLocalPDF(input){
+    const file = input.files[0]; if(!file) return;
+    if(file.type !== "application/pdf"){ alert("Only PDF preview supported"); return; }
+    const iframe = document.getElementById("pdf-preview");
+    iframe.src = URL.createObjectURL(file); iframe.style.display = "block";
+}
+
+function addFinancialRow() {
+    const container = document.getElementById("financial-container");
+    const div = document.createElement("div"); div.className="entry-row";
+    div.innerHTML = `Category: <input type="text" name="category[]">
+                     Gross: <input type="number" step="any" name="gross_premium[]">
+                     Commission: <input type="number" step="any" name="commission[]">
+                     Overriding Insurer: <input type="number" step="any" name="overriding_insurer[]">
+                     Cost: <input type="number" step="any" name="cost[]">
+                     Profit: <input type="number" step="any" name="profit[]">
+                     <button type="button" onclick="this.parentElement.remove()">X</button>`;
+    container.appendChild(div);
+}
+
+function addStatementEntry() {
+    const container = document.getElementById("entry-container");
+    const div = document.createElement("div"); div.className="entry-row";
+    div.innerHTML = `Effective date: <input type="date" name="effective_date[]">
+                     Debit note: <input type="text" name="debit_note[]">
+                     Policy number: <input type="text" name="policy_number[]">
+                     Premium: <input type="number" step="0.01" name="premium[]" oninput="updateTotalPremiumDue()">
+                     <button type="button" onclick="this.parentElement.remove(); updateTotalPremiumDue();">X</button>`;
+    container.appendChild(div);
+}
+
+function addRenewalEntry() {
+    const container = document.getElementById("renewal-entry-container");
+    const div = document.createElement("div"); div.className="entry-row";
+    div.innerHTML = `Label: <input type="text" name="label[]">
+                     Amount: <input type="number" step="0.01" name="amount[]" oninput="updateTotalEarning()">
+                     <button type="button" onclick="this.parentElement.remove(); updateTotalEarning();">X</button>`;
+    container.appendChild(div);
+}
+
+function scanPDF(){
+    const formData = new FormData();
+    const input = document.querySelector('input[name="document_file"]');
+    const docType = "{{ doc_type }}";
+    formData.append("doc_type", docType);
+
+    if(input.files.length) {
+        formData.append("document_file", input.files[0]);
+    } else {
+        {% if main_data and main_data.get('id') %}
+        formData.append("existing_file_url",
+            "{{ url_for('preview_pdf', doc_type=doc_type, doc_id=main_data.id, _external=True) }}"
+        );
+        {% else %}
+        alert("Select a PDF first!"); return;
+        {% endif %}
+    }
+
+    fetch("/scan_pdf", {method:"POST", body:formData})
+    .then(res=>res.json())
+    .then(data=>{
+        if(data.error){ alert("Error: "+data.error); return; }
+
+        let filled = false;
+        function normalizeDate(value){
+            if(!value) return "";
+            value=value.trim();
+            if(/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+            let match=value.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if(match){ return `${match[3]}-${match[2].padStart(2,'0')}-${match[1].padStart(2,'0')}`; }
+            const d=new Date(value); if(isNaN(d)) return "";
+            return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
+        }
+
+        function safeSet(selector, value){ if(value!=null){ const el=document.querySelector(selector); if(el){ el.value=value; filled=true; } } }
+
+        safeSet('input[name="issue_date"]', normalizeDate(data.issue_date));
+        safeSet('input[name="policy_number"]', data.policy_number);
+        safeSet('input[name="account_number"]', data.account_number);
+        safeSet('input[name="endorsement_number"]', data.endorsement_number);
+        if(docType==="debit_note") safeSet('input[name="insured_or_agent"]', data.insured_or_agent);
+        else safeSet('input[name="insured"]', data.insured);
+        if(docType==="account_statement"){
+            safeSet('input[name="premium_due_date"]', normalizeDate(data.premium_due_date));
+            safeSet('input[name="total_premium_due"]', data.total_premium_due);
+            safeSet('input[name="address"]', data.address);
+        }
+        if(docType==="renewal_notice"){
+            safeSet('input[name="expiry_date"]', normalizeDate(data.expiry_date));
+            safeSet('input[name="total_earning"]', data.total_earning);
+            safeSet('input[name="ac_code"]', data.ac_code);
+            safeSet('input[name="renewal_premium"]', data.renewal_premium);
+        }
+        safeSet('input[name="insurance_class"]', data.insurance_class);
+
+        // Financials
+        const finContainer = document.getElementById("financial-container");
+        if(finContainer && data.financials && data.financials.length){
+            finContainer.innerHTML = "";
+            data.financials.forEach(f=>{
+                const div=document.createElement("div"); div.className="entry-row";
+                div.innerHTML=`Category: <input type="text" name="category[]" value="${f.category||''}">
+                               Gross: <input type="number" step="any" name="gross_premium[]" value="${f.gross_premium||''}">
+                               Commission: <input type="number" step="any" name="commission[]" value="${f.commission||''}">
+                               Overriding Insurer: <input type="number" step="any" name="overriding_insurer[]" value="${f.overriding_insurer||''}">
+                               Cost: <input type="number" step="any" name="cost[]" value="${f.cost||''}">
+                               Profit: <input type="number" step="any" name="profit[]" value="${f.profit||''}">
+                               <button type="button" onclick="this.parentElement.remove()">X</button>`;
+                finContainer.appendChild(div);
+            });
+        }
+
+        // Statement Entries
+        const entryContainer = document.getElementById("entry-container");
+        if(entryContainer && data.entries && data.entries.length){
+            entryContainer.innerHTML="";
+            data.entries.forEach(e=>{
+                const div=document.createElement("div"); div.className="entry-row";
+                div.innerHTML=`Effective date: <input type="date" name="effective_date[]" value="${normalizeDate(e.effective_date)||''}">
+                               Debit note: <input type="text" name="debit_note[]" value="${e.debit_note||''}">
+                               Policy number: <input type="text" name="policy_number[]" value="${e.policy_number||''}">
+                               Premium: <input type="number" step="0.01" name="premium[]" value="${e.premium||''}" oninput="updateTotalPremiumDue()">
+                               <button type="button" onclick="this.parentElement.remove(); updateTotalPremiumDue();">X</button>`;
+                entryContainer.appendChild(div);
+            });
+        }
+
+        // Renewal Entries
+        const renewalContainer = document.getElementById("renewal-entry-container");
+        if(renewalContainer && data.renewal_entries && data.renewal_entries.length){
+            renewalContainer.innerHTML="";
+            data.renewal_entries.forEach(r=>{
+                const div=document.createElement("div"); div.className="entry-row";
+                div.innerHTML=`Label: <input type="text" name="label[]" value="${r.label||''}">
+                               Amount: <input type="number" step="0.01" name="amount[]" value="${r.amount||''}" oninput="updateTotalEarning()">
+                               <button type="button" onclick="this.parentElement.remove(); updateTotalEarning();">X</button>`;
+                renewalContainer.appendChild(div);
+            });
+        }
+
+        alert(filled ? "Auto-fill done! Review and submit." : "No data extracted from PDF.");
+    })
+    .catch(err=>{ console.error(err); alert("Failed to scan PDF. See console."); });
+}
+</script>
+
+</body>
+</html>

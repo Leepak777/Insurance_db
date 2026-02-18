@@ -1,0 +1,361 @@
+<style>
+/* General Styling */
+body {
+    font-family: Arial, sans-serif;
+    background: #f5f7fa;
+    color: #333;
+    margin: 20px;
+}
+
+h1, h2, h3, h4 {
+    color: #2c3e50;
+}
+
+/* Filter form */
+#filter-form {
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+}
+
+#filter-form select, #filter-form input[type="submit"], #filter-form button {
+    margin: 5px 0;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+}
+
+/* Create links */
+h2 + a {
+    margin-right: 10px;
+    text-decoration: none;
+    color: #2980b9;
+    font-weight: bold;
+}
+
+h2 + a:hover {
+    text-decoration: underline;
+}
+
+/* Main table */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+table th {
+    background: #2980b9;
+    color: #fff;
+    padding: 8px;
+    text-align: left;
+}
+
+table td {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+}
+
+table tr:nth-child(even) td {
+    background: #f9f9f9;
+}
+
+/* Buttons */
+button {
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #2980b9;
+    background: #2980b9;
+    color: #fff;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+button:hover {
+    background: #1c5980;
+}
+
+/* PDF Modal */
+#pdf-modal {
+    display: none;
+    position: fixed;
+    top:0; left:0; width:100%; height:100%;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+#pdf-modal-content {
+    position: relative;
+    width: 80%;
+    height: 80%;
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+#pdf-modal-content iframe {
+    flex: 1;
+    border: none;
+    border-radius: 4px;
+}
+
+#pdf-modal-content button {
+    align-self: flex-end;
+    background: #e74c3c;
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-bottom: 6px;
+}
+
+#pdf-modal-content button:hover {
+    background: #c0392b;
+}
+
+/* Details tables */
+.details-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    margin-top: 10px;
+}
+
+.details-table th {
+    background: #3498db;
+    color: #fff;
+    padding: 6px;
+    text-align: left;
+}
+
+.details-table td {
+    padding: 6px;
+    border-bottom: 1px solid #eee;
+}
+
+.details-table tr:nth-child(even) {
+    background: #f9f9f9;
+}
+</style>
+
+<h1>Insurance Documents</h1>
+
+<form method="get" id="filter-form">
+    Document type:
+    <select name="doc_type">
+        <option value="all" {% if doc_type=='all' %}selected{% endif %}>All</option>
+        <option value="debit_note" {% if doc_type=='debit_note' %}selected{% endif %}>Debit Note</option>
+        <option value="account_statement" {% if doc_type=='account_statement' %}selected{% endif %}>Account Statement</option>
+        <option value="renewal_notice" {% if doc_type=='renewal_notice' %}selected{% endif %}>Renewal Notice</option>
+    </select>
+
+    <h3>Filters</h3>
+    <div id="filter-container"></div>
+    <button type="button" onclick="addFilterRow()">Add Filter</button>
+
+    <h3>Sorting</h3>
+    Sort by:
+    <select name="sort_by">
+        {% for f in [
+            'id','doc_type','issue_date','insured_or_agent','insured',
+            'insurance_class','policy_number','endorsement_number',
+            'account_number','expiry_date','ac_code',
+            'total_earning','renewal_premium'
+        ] %}<option value="{{ f }}" {% if sort_by == f %}selected{% endif %}>{{ f }}</option>{% endfor %}
+    </select>
+
+    Order:
+    <select name="sort_order">
+        <option value="asc" {% if sort_order=='asc' %}selected{% endif %}>Asc</option>
+        <option value="desc" {% if sort_order=='desc' %}selected{% endif %}>Desc</option>
+    </select>
+
+    <input type="submit" value="Apply">
+</form>
+
+<hr>
+
+<h2>Create Document</h2>
+<a href="{{ url_for('create_doc', doc_type='debit_note') }}">Create Debit Note</a> |
+<a href="{{ url_for('create_doc', doc_type='account_statement') }}">Create Account Statement</a> |
+<a href="{{ url_for('create_doc', doc_type='renewal_notice') }}">Create Renewal Notice</a>
+
+<hr>
+
+<h2>All Documents</h2>
+
+{% if not data %}<p>No documents found.</p>{% endif %}
+
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Type</th>
+            <th>Date</th>
+            <th>Insured / Agent</th>
+            <th>Insurance Class</th>
+            <th>Policy #</th>
+            <th>Account #</th>
+            <th>Expiry</th>
+            <th>AC Code</th>
+            <th>File</th>
+            <th>Details</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for row in data %}
+        <tr>
+            <td>{{ row.id }}</td>
+            <td>{{ row.doc_type }}</td>
+            <td>{{ row.issue_date or '—' }}</td>
+            <td>{{ row.insured_or_agent or row.insured or '—' }}</td>
+            <td>{{ row.insurance_class or '—' }}</td>
+            <td>{{ row.policy_number or '—' }}</td>
+            <td>{{ row.account_number or '—' }}</td>
+            <td>{{ row.expiry_date or '—' }}</td>
+            <td>{{ row.ac_code or '—' }}</td>
+            <td>
+                {% if row.file_name %}
+                    <a href="{{ url_for('download_file', doc_type=row.doc_type, doc_id=row.id) }}">Download</a> |
+                    <button type="button" onclick="previewPDF('{{ row.doc_type }}','{{ row.id }}')">Preview</button>
+                {% else %}—{% endif %}
+            </td>
+            <td>
+                <button type="button" onclick="toggleDetails('details-{{ loop.index }}')">Show</button>
+            </td>
+            <td>
+                <a href="{{ url_for('edit_doc', doc_type=row.doc_type, doc_id=row.id) }}">Edit</a>
+                <form action="{{ url_for('delete_doc', doc_type=row.doc_type, doc_id=row.id) }}" method="post" style="display:inline;" onsubmit="return confirm('Delete this document?');">
+                    <button type="submit">Delete</button>
+                </form>
+            </td>
+        </tr>
+
+        <tr id="details-{{ loop.index }}" style="display:none;">
+            <td colspan="12">
+                <h4>Document Info</h4>
+                <table class="details-table">
+                    {% for key, value in row.items() %}
+                        {% if key not in ['children','file_data'] %}
+                        <tr><td><b>{{ key }}</b></td><td>{{ value }}</td></tr>
+                        {% endif %}
+                    {% endfor %}
+                </table>
+
+                {% if row.children %}
+                <h4>Entries</h4>
+                <table class="details-table">
+                    <thead>
+                        <tr>{% for k in row.children[0].keys() %}<th>{{ k }}</th>{% endfor %}</tr>
+                    </thead>
+                    <tbody>
+                        {% for c in row.children %}
+                        <tr>{% for v in c.values() %}<td>{{ v }}</td>{% endfor %}</tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<!-- PDF Preview Modal -->
+<div id="pdf-modal">
+    <div id="pdf-modal-content">
+        <button onclick="closePDFModal()">Close</button>
+        <iframe id="pdf-modal-iframe"></iframe>
+    </div>
+</div>
+
+
+<script>
+function previewPDF(docType, docId) {
+    const iframe = document.getElementById("pdf-modal-iframe");
+    iframe.src = `/preview/${docType}/${docId}`;
+    document.getElementById("pdf-modal").style.display = "flex";
+}
+
+function closePDFModal() {
+    document.getElementById("pdf-modal").style.display = "none";
+    document.getElementById("pdf-modal-iframe").src = "";
+}
+function toggleDetails(id) {
+    const row = document.getElementById(id);
+    row.style.display = row.style.display === "none" ? "table-row" : "none";
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    const container = document.getElementById("filter-container");
+
+    const allFields = [
+        'issue_date','insured_or_agent','insured','insurance_class',
+        'policy_number','endorsement_number','account_number','expiry_date',
+        'ac_code','total_earning','renewal_premium',
+        'category','gross_premium','commission','overriding_insurer','cost','profit',
+        'effective_date','debit_note','premium','label','amount'
+    ];
+
+    window.addFilterRow = function(field='', op='=', value='') {
+        const row = document.createElement("div");
+        row.style.display = "flex";
+        row.style.gap = "6px";
+        row.style.marginBottom = "4px";
+
+        const fs = document.createElement("select");
+        fs.name = "filter_field[]";
+        allFields.forEach(f => {
+            const o = document.createElement("option");
+            o.value = f;
+            o.textContent = f;
+            if (f === field) o.selected = true;
+            fs.appendChild(o);
+        });
+
+        const os = document.createElement("select");
+        os.name = "filter_op[]";
+        ["=", ">", "<", "LIKE"].forEach(o => {
+            const opt = document.createElement("option");
+            opt.value = o;
+            opt.textContent = o;
+            if (o === op) opt.selected = true;
+            os.appendChild(opt);
+        });
+
+        const iv = document.createElement("input");
+        iv.name = "filter_value[]";
+        iv.value = value;
+
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.textContent = "X";
+        rm.onclick = () => row.remove();
+
+        row.append(fs, os, iv, rm);
+        container.appendChild(row);
+    };
+
+    {% for f, op, v in filters_zipped %}
+        addFilterRow({{ f|tojson }}, {{ op|tojson }}, {{ v|tojson }});
+    {% endfor %}
+});
+</script>
