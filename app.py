@@ -398,8 +398,28 @@ def edit_doc(doc_type, doc_id):
 
 # ---------------- SCAN PDF ----------------
 from ocr.document_parser import parse_document
-from ocr.ocr_utils import ocr_pdf_to_text
+from ai_qa import (
+    answer_question_from_pdf,
+    extract_best_text,
+    extract_raw_text,
+    clean_text_with_ollama,
+    extract_structured_data_with_ollama,
+    extract_fields_from_pdf,
+    classify_document_type,
+)
 reader = None
+
+
+def is_missing_value(value):
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in {"", "n/a", "na", "-", "none", "null", "unknown"}
+    if isinstance(value, (list, dict, tuple, set)):
+        return len(value) == 0
+    if isinstance(value, (int, float)):
+        return value == 0
+    return False
 
 @app.route('/scan_pdf', methods=['POST'])
 def scan_pdf():
@@ -417,9 +437,120 @@ def scan_pdf():
         return jsonify({"error": "Please upload a PDF file"}), 400
 
     try:
-        raw_text = ocr_pdf_to_text(pdf_bytes)
+        raw_text = extract_best_text(pdf_bytes)
         data = parse_document(raw_text, doc_type)
+
+        # LLM-assisted field extraction to improve noisy OCR parsing.
+        llm_data = extract_structured_data_with_ollama(raw_text, doc_type)
+        if isinstance(llm_data, dict):
+            for key, value in llm_data.items():
+                if key in data and is_missing_value(data.get(key)) and (not is_missing_value(value)):
+                    data[key] = value
+
         return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/ask_document', methods=['POST'])
+def ask_document():
+    file = request.files.get('document_file')
+    question = request.form.get('question', '').strip()
+
+    if not file or not file.filename:
+        return jsonify({"error": "Please upload a PDF file"}), 400
+
+    if not file.filename.lower().endswith('.pdf'):
+        return jsonify({"error": "Only PDF files are supported"}), 400
+
+    if not question:
+        return jsonify({"error": "Question is required"}), 400
+
+    try:
+        result = answer_question_from_pdf(file.read(), question)
+        return jsonify({"answer": result["answer"]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/ask_with_sources', methods=['POST'])
+def ask_with_sources():
+    file = request.files.get('document_file')
+    question = request.form.get('question', '').strip()
+
+    if not file or not file.filename:
+        return jsonify({"error": "Please upload a PDF file"}), 400
+    if not file.filename.lower().endswith('.pdf'):
+        return jsonify({"error": "Only PDF files are supported"}), 400
+    if not question:
+        return jsonify({"error": "Question is required"}), 400
+
+    try:
+        result = answer_question_from_pdf(file.read(), question)
+        return jsonify({
+            "answer": result.get("answer", ""),
+            "sources": result.get("sources", []),
+            "confidence": result.get("confidence", "low"),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/extract_fields', methods=['POST'])
+def extract_fields():
+    file = request.files.get('document_file')
+    doc_type = request.form.get('doc_type', 'auto').strip()
+
+    if not file or not file.filename:
+        return jsonify({"error": "Please upload a PDF file"}), 400
+    if not file.filename.lower().endswith('.pdf'):
+        return jsonify({"error": "Only PDF files are supported"}), 400
+    try:
+        data = extract_fields_from_pdf(file.read(), doc_type)
+        resolved = data.get("_resolved_doc_type", doc_type) if isinstance(data, dict) else doc_type
+        if isinstance(data, dict) and "_resolved_doc_type" in data:
+            data = {k: v for k, v in data.items() if k != "_resolved_doc_type"}
+        return jsonify({"doc_type": resolved, "data": data})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/classify_doc_type', methods=['POST'])
+def classify_doc_type():
+    file = request.files.get('document_file')
+
+    if not file or not file.filename:
+        return jsonify({"error": "Please upload a PDF file"}), 400
+    if not file.filename.lower().endswith('.pdf'):
+        return jsonify({"error": "Only PDF files are supported"}), 400
+
+    try:
+        raw_text = extract_raw_text(file.read())
+        cleaned_text = clean_text_with_ollama(raw_text) if raw_text else ""
+        predicted = classify_document_type(cleaned_text or raw_text)
+        return jsonify({"doc_type": predicted})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/scan_compare', methods=['POST'])
+def scan_compare():
+    file = request.files.get('document_file')
+
+    if not file or not file.filename:
+        return jsonify({"error": "Please upload a PDF file"}), 400
+
+    if not file.filename.lower().endswith('.pdf'):
+        return jsonify({"error": "Only PDF files are supported"}), 400
+
+    try:
+        pdf_bytes = file.read()
+        raw_text = extract_raw_text(pdf_bytes)
+        cleaned_text = clean_text_with_ollama(raw_text) if raw_text else ""
+        return jsonify({
+            "raw_text": raw_text,
+            "cleaned_text": cleaned_text
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

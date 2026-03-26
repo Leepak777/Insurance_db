@@ -153,6 +153,93 @@ button:hover {
 .details-table tr:nth-child(even) {
     background: #f9f9f9;
 }
+
+#qa-box {
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    margin: 14px 0;
+}
+
+#qa-box input[type="file"],
+#qa-box input[type="text"] {
+    margin: 6px 0;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#qa-answer {
+    margin-top: 10px;
+    background: #f8fbff;
+    border: 1px solid #d8e8f8;
+    border-radius: 6px;
+    padding: 10px;
+    white-space: pre-wrap;
+    min-height: 24px;
+}
+
+#qa-preview {
+    margin-top: 10px;
+    width: 100%;
+    height: 450px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    display: none;
+}
+
+.compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.compare-grid textarea {
+    width: 100%;
+    height: 240px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 8px;
+    resize: vertical;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+}
+
+#qa-meta {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #2c3e50;
+}
+
+#qa-sources,
+#qa-fields {
+    margin-top: 10px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 10px;
+}
+
+.source-item {
+    padding: 8px;
+    border: 1px solid #e6edf5;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    background: #fbfdff;
+}
+
+#qa-fields pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+    font-family: Consolas, monospace;
+}
 </style>
 
 <h1>Insurance Documents</h1>
@@ -196,6 +283,44 @@ button:hover {
 <a href="{{ url_for('create_doc', doc_type='debit_note') }}">Create Debit Note</a> |
 <a href="{{ url_for('create_doc', doc_type='account_statement') }}">Create Account Statement</a> |
 <a href="{{ url_for('create_doc', doc_type='renewal_notice') }}">Create Renewal Notice</a>
+
+<hr>
+
+<h2>Ask Questions About Uploaded PDF</h2>
+<div id="qa-box">
+    <input type="file" id="qa-file" accept=".pdf,application/pdf" onchange="previewLocalQAPDF(this)">
+    <iframe id="qa-preview"></iframe>
+    <div style="margin-top:8px;">
+        <button type="button" onclick="scanAndCompareText()">Scan</button>
+    </div>
+    <div class="compare-grid">
+        <div>
+            <b>Raw Extracted Text</b>
+            <textarea id="qa-raw-text" readonly placeholder="Raw extracted text appears here..."></textarea>
+        </div>
+        <div>
+            <b>AI Cleaned Text</b>
+            <textarea id="qa-clean-text" readonly placeholder="AI cleaned text appears here..."></textarea>
+        </div>
+    </div>
+    <input type="text" id="qa-question" placeholder="e.g. what is the premium?">
+    <button type="button" onclick="askUploadedDocument()">Ask</button>
+    <button type="button" onclick="askWithSources()">Ask with Sources</button>
+    <select id="qa-doc-type">
+        <option value="auto" selected>auto (detect)</option>
+        <option value="debit_note">debit_note</option>
+        <option value="account_statement">account_statement</option>
+        <option value="renewal_notice">renewal_notice</option>
+    </select>
+    <button type="button" onclick="extractFieldsFromDocument()">Extract Fields</button>
+    <div id="qa-answer">Answer will appear here.</div>
+    <div id="qa-meta"></div>
+    <div id="qa-sources" style="display:none;"></div>
+    <div id="qa-fields" style="display:none;">
+        <b>Extracted Fields (JSON)</b>
+        <pre id="qa-fields-json"></pre>
+    </div>
+</div>
 
 <hr>
 
@@ -302,6 +427,217 @@ function closePDFModal() {
 function toggleDetails(id) {
     const row = document.getElementById(id);
     row.style.display = row.style.display === "none" ? "table-row" : "none";
+}
+
+function previewLocalQAPDF(input) {
+    const preview = document.getElementById("qa-preview");
+    const file = input.files && input.files[0];
+    if (!file) {
+        preview.style.display = "none";
+        preview.src = "";
+        return;
+    }
+    if (file.type !== "application/pdf") {
+        alert("Only PDF preview is supported.");
+        input.value = "";
+        preview.style.display = "none";
+        preview.src = "";
+        return;
+    }
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = "block";
+}
+
+async function scanAndCompareText() {
+    const fileInput = document.getElementById("qa-file");
+    const rawBox = document.getElementById("qa-raw-text");
+    const cleanBox = document.getElementById("qa-clean-text");
+    const answerBox = document.getElementById("qa-answer");
+    const file = fileInput.files[0];
+
+    if (!file) {
+        answerBox.textContent = "Please choose a PDF file first.";
+        return;
+    }
+
+    rawBox.value = "Extracting...";
+    cleanBox.value = "Cleaning with AI...";
+    answerBox.textContent = "Scanning document...";
+    const docTypeSelect = document.getElementById("qa-doc-type");
+
+    const formData = new FormData();
+    formData.append("document_file", file);
+
+    try {
+        const res = await fetch("/scan_compare", {
+            method: "POST",
+            body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            answerBox.textContent = data.error || "Failed to scan document.";
+            rawBox.value = "";
+            cleanBox.value = "";
+            return;
+        }
+        rawBox.value = data.raw_text || "";
+        cleanBox.value = data.cleaned_text || "";
+        answerBox.textContent = "Scan complete. You can compare raw vs cleaned text now.";
+
+        // Auto-classify doc type after scan, but keep manual override available.
+        const classifyForm = new FormData();
+        classifyForm.append("document_file", file);
+        const classRes = await fetch("/classify_doc_type", {
+            method: "POST",
+            body: classifyForm
+        });
+        const classData = await classRes.json();
+        if (classRes.ok && classData.doc_type) {
+            docTypeSelect.value = classData.doc_type;
+            document.getElementById("qa-meta").textContent = `Suggested doc type: ${classData.doc_type}`;
+        } else {
+            document.getElementById("qa-meta").textContent = "Suggested doc type: (not detected)";
+        }
+    } catch (err) {
+        rawBox.value = "";
+        cleanBox.value = "";
+        answerBox.textContent = "Scan request failed. Please try again.";
+        console.error(err);
+    }
+}
+
+async function askUploadedDocument() {
+    const fileInput = document.getElementById("qa-file");
+    const questionInput = document.getElementById("qa-question");
+    const answerBox = document.getElementById("qa-answer");
+
+    const file = fileInput.files[0];
+    const question = questionInput.value.trim();
+
+    if (!file) {
+        answerBox.textContent = "Please choose a PDF file first.";
+        return;
+    }
+    if (!question) {
+        answerBox.textContent = "Please enter a question.";
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("document_file", file);
+    formData.append("question", question);
+    document.getElementById("qa-meta").textContent = "";
+    document.getElementById("qa-sources").style.display = "none";
+
+    answerBox.textContent = "Thinking...";
+
+    try {
+        const res = await fetch("/ask_document", {
+            method: "POST",
+            body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            answerBox.textContent = data.error || "Failed to answer question.";
+            return;
+        }
+        answerBox.textContent = data.answer || "No answer returned.";
+    } catch (err) {
+        answerBox.textContent = "Request failed. Please try again.";
+        console.error(err);
+    }
+}
+
+async function askWithSources() {
+    const fileInput = document.getElementById("qa-file");
+    const questionInput = document.getElementById("qa-question");
+    const answerBox = document.getElementById("qa-answer");
+    const metaBox = document.getElementById("qa-meta");
+    const sourcesBox = document.getElementById("qa-sources");
+
+    const file = fileInput.files[0];
+    const question = questionInput.value.trim();
+    if (!file) {
+        answerBox.textContent = "Please choose a PDF file first.";
+        return;
+    }
+    if (!question) {
+        answerBox.textContent = "Please enter a question.";
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("document_file", file);
+    formData.append("question", question);
+
+    answerBox.textContent = "Thinking with sources...";
+    metaBox.textContent = "";
+    sourcesBox.style.display = "none";
+    sourcesBox.innerHTML = "";
+
+    try {
+        const res = await fetch("/ask_with_sources", { method: "POST", body: formData });
+        const data = await res.json();
+        if (!res.ok) {
+            answerBox.textContent = data.error || "Failed to answer with sources.";
+            return;
+        }
+
+        answerBox.textContent = data.answer || "No answer returned.";
+        metaBox.textContent = `Confidence: ${data.confidence || "low"}`;
+
+        const sources = data.sources || [];
+        if (sources.length > 0) {
+            sourcesBox.style.display = "block";
+            sourcesBox.innerHTML = "<b>Sources</b>";
+            for (const src of sources) {
+                const item = document.createElement("div");
+                item.className = "source-item";
+                item.innerHTML = `<div><b>Page:</b> ${src.page ?? "N/A"} | <b>Score:</b> ${src.score}</div><div>${src.snippet || ""}</div>`;
+                sourcesBox.appendChild(item);
+            }
+        }
+    } catch (err) {
+        answerBox.textContent = "Request failed. Please try again.";
+        console.error(err);
+    }
+}
+
+async function extractFieldsFromDocument() {
+    const fileInput = document.getElementById("qa-file");
+    const docType = document.getElementById("qa-doc-type").value;
+    const answerBox = document.getElementById("qa-answer");
+    const fieldsWrap = document.getElementById("qa-fields");
+    const fieldsJson = document.getElementById("qa-fields-json");
+
+    const file = fileInput.files[0];
+    if (!file) {
+        answerBox.textContent = "Please choose a PDF file first.";
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("document_file", file);
+    formData.append("doc_type", docType);
+
+    answerBox.textContent = "Extracting structured fields...";
+    fieldsWrap.style.display = "none";
+    fieldsJson.textContent = "";
+
+    try {
+        const res = await fetch("/extract_fields", { method: "POST", body: formData });
+        const data = await res.json();
+        if (!res.ok) {
+            answerBox.textContent = data.error || "Failed to extract fields.";
+            return;
+        }
+        fieldsWrap.style.display = "block";
+        fieldsJson.textContent = JSON.stringify(data, null, 2);
+        answerBox.textContent = "Field extraction complete.";
+    } catch (err) {
+        answerBox.textContent = "Request failed. Please try again.";
+        console.error(err);
+    }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
